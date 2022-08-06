@@ -21,12 +21,28 @@ die(const char *format, ...)
 static void
 make_log(const char *tplname)
 {
+	git_revwalk *walker;
+	git_oid oid;
+	git_commit *commit;
 	CStacheTemplate *tpl;
 	int status;
 
-	status = c_stache_load_template(&stacheEngine, tplname, &tpl);
-	if (status != C_STACHE_OK)
-		die("%s", c_stache_strerror(status));
+	//status = c_stache_load_template(&stacheEngine, tplname, &tpl);
+	//if (status != C_STACHE_OK)
+	//	die("%s", c_stache_strerror(status));
+
+	git_revwalk_new(&walker, gitRepo);
+	git_revwalk_push_head(walker);
+
+	while (!git_revwalk_next(&oid, walker)) {
+		git_commit_lookup(&commit, gitRepo, &oid);
+
+		printf("%s\n--\n", git_commit_summary(commit));
+
+		git_commit_free(commit);
+	}
+
+	git_revwalk_free(walker);
 }
 
 int
