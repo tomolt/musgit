@@ -33,7 +33,6 @@ die(const char *format, ...)
 static int
 log_enter(void *userptr, const char *section)
 {
-	git_oid oid;
 	struct log_iter *iter = userptr;
 	switch (iter->state) {
 	case LOG_ROOT:
@@ -41,15 +40,10 @@ log_enter(void *userptr, const char *section)
 			iter->state = LOG_COMMITS;
 			git_revwalk_new(&iter->revwalk, gitRepo);
 			git_revwalk_push_head(iter->revwalk);
-			if (!git_revwalk_next(&oid, iter->revwalk)) {
-				git_commit_lookup(&iter->commit, gitRepo, &oid);
-				return 1;
-			} else {
-				git_revwalk_free(iter->revwalk);
-				return 0;
-			}
+			iter->commit = NULL;
+			return 1;
 		}
-		/* fallthrough */
+		return 0;
 
 	default:
 		return 0;
@@ -63,28 +57,26 @@ log_next(void *userptr)
 	struct log_iter *iter = userptr;
 	switch (iter->state) {
 	case LOG_COMMITS:
-		git_commit_free(iter->commit);
-		if (!git_revwalk_next(&oid, iter->revwalk)) {
-			git_commit_lookup(&iter->commit, gitRepo, &oid);
-			return 1;
-		} else {
-			git_revwalk_free(iter->revwalk);
-			return 0;
-		}
+		if (iter->commit) git_commit_free(iter->commit);
+		if (git_revwalk_next(&oid, iter->revwalk)) return 0;
+		git_commit_lookup(&iter->commit, gitRepo, &oid);
+		return 1;
 
 	default:
 		return 0;
 	}
 }
 
-static int
-log_empty(void *userptr, const char *section)
+static void
+log_leave(void *userptr)
 {
 	struct log_iter *iter = userptr;
-	(void) iter;
-	(void) section;
-	/* TODO */
-	return 0;
+	switch (iter->state) {
+	case LOG_COMMITS:
+		git_revwalk_free(iter->revwalk);
+		iter->state = LOG_ROOT;
+		break;
+	}
 }
 
 static const char *
@@ -118,7 +110,7 @@ make_log(const char *tplfile)
 	CStacheModel model = {
 		log_enter,
 		log_next,
-		log_empty,
+		log_leave,
 		log_subst,
 		&iter
 	};
